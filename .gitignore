@@ -1,0 +1,6 @@
+# Frontend env file
+notesfrontend/.env
+notesbackend/.env
+
+# Backend Spring Boot dev config
+notesbackend/src/main/resources/application-dev.properties
