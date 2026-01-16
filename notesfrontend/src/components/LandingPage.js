@@ -6,6 +6,8 @@ import Brands from "./LandingPageCom/Brands/Brands";
 import State from "./LandingPageCom/State";
 import Testimonial from "./LandingPageCom/Testimonial/Testimonial";
 import { useMyContext } from "../store/ContextApi";
+import { useEffect } from "react";
+import { startKeepAlive } from "../utils/keepAlive";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 32 },
@@ -14,11 +16,14 @@ const fadeUp = {
 
 const LandingPage = () => {
   const { token } = useMyContext();
-
+  useEffect(() => {
+    const cleanup = startKeepAlive(14); // Ping every 14 minutes
+    return cleanup;
+  }, []);
+  
   return (
     <div className="min-h-[calc(100vh-74px)] bg-slate-950 text-slate-100">
       <div className="relative overflow-hidden">
-        {/* hero background glows */}
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.18),transparent_35%),radial-gradient(circle_at_80%_10%,rgba(236,72,153,0.16),transparent_32%),radial-gradient(circle_at_50%_80%,rgba(56,189,248,0.14),transparent_38%)]" />
         <div className="relative max-w-6xl mx-auto px-5 sm:px-8 pt-16 pb-14 lg:pt-24 lg:pb-20">
           {/* top nav spacer if needed */}
