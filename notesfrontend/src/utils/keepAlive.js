@@ -1,158 +1,298 @@
 import api from "../services/api";
 
-// Status object to track server state
-const serverStatus = {
-  isUp: true,
-  lastCheck: null,
-  retryCount: 0,
-  maxRetries: 3
+// ========== CONFIGURATION ==========
+const CONFIG = {
+  pingInterval: 14, // minutes
+  maxRetries: 3,
+  fadeDelay: 5000, // ms
+  successFadeDelay: 10000, // ms for first success
 };
 
-// Create a simple UI element
-const createStatusIndicator = () => {
-  const indicator = document.createElement('div');
-  indicator.id = 'server-status-indicator';
-  indicator.style.cssText = `
+const STATUS = {
+  isUp: false,
+  lastCheck: null,
+  retryCount: 0,
+  isInitialPing: true,
+};
+
+// ========== CSS STYLES ==========
+const STYLES = `
+  #server-status-indicator {
     position: fixed;
     bottom: 20px;
     right: 20px;
-    padding: 8px 12px;
+    padding: 8px 16px;
     border-radius: 20px;
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     z-index: 9999;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     transition: all 0.3s ease;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
     backdrop-filter: blur(10px);
-  `;
+    opacity: 0;
+    transform: translateY(10px);
+    animation: fadeInUp 0.5s ease forwards;
+  }
   
-  const dot = document.createElement('span');
-  dot.id = 'status-dot';
-  dot.style.cssText = `
-    width: 8px;
-    height: 8px;
+  #status-dot {
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
-    display: inline-block;
-    transition: background-color 0.3s ease;
-  `;
+    transition: all 0.3s ease;
+  }
   
-  const text = document.createElement('span');
-  text.id = 'status-text';
+  #status-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    display: none;
+  }
   
-  indicator.appendChild(dot);
-  indicator.appendChild(text);
+  .checkmark {
+    opacity: 0;
+    transform: scale(0);
+    transition: all 0.3s ease;
+    margin-left: 4px;
+    font-weight: bold;
+  }
+  
+  .checkmark-visible {
+    opacity: 1;
+    transform: scale(1);
+  }
+  
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+`;
+
+// ========== HELPER FUNCTIONS ==========
+const addStyles = () => {
+  if (document.getElementById("keep-alive-styles")) return;
+
+  const styleEl = document.createElement("style");
+  styleEl.id = "keep-alive-styles";
+  styleEl.textContent = STYLES;
+  document.head.appendChild(styleEl);
+};
+
+const createIndicator = () => {
+  addStyles();
+
+  const indicator = document.createElement("div");
+  indicator.id = "server-status-indicator";
+
+  const dot = document.createElement("span");
+  dot.id = "status-dot";
+
+  const spinner = document.createElement("span");
+  spinner.id = "status-spinner";
+
+  const text = document.createElement("span");
+  text.id = "status-text";
+
+  indicator.append(dot, spinner, text);
   document.body.appendChild(indicator);
-  
-  return { indicator, dot, text };
+
+  return { indicator, dot, spinner, text };
 };
 
-// Update the indicator based on server status
-const updateStatusIndicator = (isUp, responseTime = null) => {
-  let indicator = document.getElementById('server-status-indicator');
-  let dot = document.getElementById('status-dot');
-  let text = document.getElementById('status-text');
-  
-  // Create if doesn't exist
+const getElements = () => {
+  let indicator = document.getElementById("server-status-indicator");
+  let dot = document.getElementById("status-dot");
+  let spinner = document.getElementById("status-spinner");
+  let text = document.getElementById("status-text");
+
   if (!indicator) {
-    const elements = createStatusIndicator();
-    indicator = elements.indicator;
-    dot = elements.dot;
-    text = elements.text;
+    return createIndicator();
   }
-  
-  if (isUp) {
-    dot.style.backgroundColor = '#10b981'; // Green
-    text.textContent = responseTime 
-      ? `Server active (${responseTime}ms)` 
-      : 'Server active';
-    indicator.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
-    indicator.style.color = '#10b981';
-    indicator.style.border = '1px solid rgba(16, 185, 129, 0.2)';
-  } else {
-    dot.style.backgroundColor = '#ef4444'; // Red
-    text.textContent = 'Server starting...';
-    indicator.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
-    indicator.style.color = '#ef4444';
-    indicator.style.border = '1px solid rgba(239, 68, 68, 0.2)';
-  }
-  
-  // Show indicator for a few seconds then fade out
-  indicator.style.opacity = '1';
-  clearTimeout(indicator._timeout);
-  indicator._timeout = setTimeout(() => {
-    indicator.style.opacity = '0.5';
-  }, 5000);
+
+  return { indicator, dot, spinner, text };
 };
 
-export const startKeepAlive = (intervalMinutes = 14) => {
-  const pingServer = async () => {
-    const startTime = Date.now();
-    
-    try {
-      const response = await api.get('/health-check');
-      const responseTime = Date.now() - startTime;
-      
-      serverStatus.isUp = true;
-      serverStatus.lastCheck = new Date().toISOString();
-      serverStatus.retryCount = 0;
-      
-      // Only show success occasionally to avoid spam
-      if (Math.random() < 0.2) { // 20% chance to show
-        console.log(`✅ Server ping successful (${responseTime}ms)`);
-        updateStatusIndicator(true, responseTime);
-      }
-      
-      return { success: true, responseTime, data: response.data };
-      
-    } catch (error) {
-      serverStatus.retryCount++;
-      serverStatus.isUp = serverStatus.retryCount < serverStatus.maxRetries;
-      
-      const errorMsg = error.response 
-        ? `Status: ${error.response.status}` 
-        : error.message;
-      
-      console.log(`❌ Ping failed (Attempt ${serverStatus.retryCount}): ${errorMsg}`);
-      updateStatusIndicator(false);
-      
-      // If server seems down, try a simpler endpoint
-      if (serverStatus.retryCount >= 2) {
-        try {
-          await fetch(`${process.env.REACT_APP_API_URL}/api/ping`);
-          console.log('🔄 Fallback ping succeeded');
-          updateStatusIndicator(true);
-          serverStatus.isUp = true;
-          serverStatus.retryCount = 0;
-        } catch (fallbackError) {
-          // Continue with error state
-        }
-      }
-      
-      return { 
-        success: false, 
-        error: errorMsg,
-        retryCount: serverStatus.retryCount 
-      };
-    }
-  };
+// ========== STATUS UPDATES ==========
+const showStartingState = () => {
+  const { dot, spinner, text, indicator } = getElements();
 
-  // Initial ping with delay to let page load
-  setTimeout(() => {
-    pingServer();
-    updateStatusIndicator(true); // Assume up initially
-  }, 2000);
-  
-  // Regular pings
+  dot.style.display = "none";
+  spinner.style.display = "inline-block";
+  spinner.style.borderTopColor = "#ef4444";
+  spinner.style.borderLeftColor = "#ef4444";
+  spinner.style.animation = "spin 1s linear infinite";
+
+  text.textContent = "Starting backend...";
+  updateIndicatorStyle(indicator, false);
+  indicator.style.opacity = "1";
+
+  // console.log('🔴 Starting backend connection...');
+};
+
+const updateIndicator = (isUp, responseTime = null) => {
+  const { dot, spinner, text, indicator } = getElements();
+
+  // Update visibility
+  spinner.style.display = isUp ? "none" : "none";
+  dot.style.display = "inline-block";
+
+  if (isUp) {
+    // Server is up - green state
+    dot.style.backgroundColor = "#10b981";
+    dot.style.animation = "pulse 2s infinite";
+    updateIndicatorStyle(indicator, true);
+
+    if (STATUS.isInitialPing) {
+      showFirstSuccess(text);
+      STATUS.isInitialPing = false;
+    } else {
+      text.textContent = responseTime
+        ? `Server active (${responseTime}ms)`
+        : "Server active";
+    }
+  } else {
+    // Server is down - red state
+    dot.style.backgroundColor = "#ef4444";
+    dot.style.animation = "pulse 1.5s infinite";
+    updateIndicatorStyle(indicator, false);
+    text.textContent = "Server starting...";
+  }
+
+  // Fade out after delay
+  indicator.style.opacity = "1";
+  clearTimeout(indicator._timeout);
+
+  const delay =
+    !STATUS.isInitialPing && isUp ? CONFIG.successFadeDelay : CONFIG.fadeDelay;
+
+  indicator._timeout = setTimeout(() => {
+    indicator.style.opacity = "0.7";
+  }, delay);
+};
+
+const showFirstSuccess = (textElement) => {
+  textElement.textContent = "Server active";
+
+  const checkmark = document.createElement("span");
+  checkmark.className = "checkmark";
+  checkmark.textContent = " ✓";
+
+  textElement.innerHTML = "";
+  textElement.append("Server active", checkmark);
+
+  setTimeout(() => checkmark.classList.add("checkmark-visible"), 100);
+  // console.log('✅ Server connection established');
+};
+
+const updateIndicatorStyle = (indicator, isUp) => {
+  if (isUp) {
+    indicator.style.backgroundColor = "rgba(16, 185, 129, 0.15)";
+    indicator.style.color = "#10b981";
+    indicator.style.border = "1px solid rgba(16, 185, 129, 0.3)";
+  } else {
+    indicator.style.backgroundColor = "rgba(239, 68, 68, 0.15)";
+    indicator.style.color = "#ef4444";
+    indicator.style.border = "1px solid rgba(239, 68, 68, 0.3)";
+  }
+};
+
+// ========== PING LOGIC ==========
+const pingServer = async () => {
+  const startTime = Date.now();
+
+  try {
+    console.log(
+      `🔄 Pinging server at ${new Date().toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true, // This ensures AM/PM
+      })}`
+    );
+    const response = await api.get("/health-check");
+    const responseTime = Date.now() - startTime;
+
+    STATUS.isUp = true;
+    STATUS.lastCheck = new Date().toISOString();
+    STATUS.retryCount = 0;
+
+    console.log(`✅ Ping successful (${responseTime}ms)`);
+    updateIndicator(true, responseTime);
+
+    return { success: true, responseTime };
+  } catch (error) {
+    return handlePingError(error, startTime);
+  }
+};
+
+const handlePingError = async (error, startTime) => {
+  STATUS.retryCount++;
+  STATUS.isUp = STATUS.retryCount < CONFIG.maxRetries;
+
+  const errorMsg = error.response?.status || error.message;
+  console.log(`❌ Ping failed (Attempt ${STATUS.retryCount}): ${errorMsg}`);
+
+  if (STATUS.retryCount === 1) {
+    updateIndicator(false);
+  }
+
+  if (STATUS.retryCount >= 2) {
+    await tryFallbackPing();
+  }
+
+  return {
+    success: false,
+    error: errorMsg,
+    retryCount: STATUS.retryCount,
+  };
+};
+
+const tryFallbackPing = async () => {
+  try {
+    console.log("🔄 Trying fallback ping...");
+    await fetch(`${process.env.REACT_APP_API_URL}/api/ping`);
+    console.log("✅ Fallback ping succeeded");
+    updateIndicator(true);
+    STATUS.isUp = true;
+    STATUS.retryCount = 0;
+  } catch {
+    console.log("❌ Fallback ping failed");
+  }
+};
+
+// ========== MAIN EXPORT ==========
+export const startKeepAlive = (intervalMinutes = CONFIG.pingInterval) => {
+  // console.log('🚀 Starting keep-alive service...');
+  // console.log(`📡 Backend URL: ${process.env.REACT_APP_API_URL}`);
+
+  // Show initial state
+  setTimeout(showStartingState, 500);
+  setTimeout(pingServer, 2000);
+
+  // Set up regular pings
   const interval = setInterval(pingServer, intervalMinutes * 60 * 1000);
 
+  // Cleanup function
   return () => {
+    // console.log('🛑 Stopping keep-alive service');
     clearInterval(interval);
-    const indicator = document.getElementById('server-status-indicator');
+
+    const indicator = document.getElementById("server-status-indicator");
     if (indicator) {
-      indicator.remove();
+      indicator.style.opacity = "0";
+      setTimeout(() => indicator.remove(), 300);
     }
   };
 };

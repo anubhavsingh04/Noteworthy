@@ -1,6 +1,7 @@
 import axios from "axios";
 
-console.log("API URL:", process.env.REACT_APP_API_URL);
+// for debug purpose
+// console.log("API URL:", process.env.REACT_APP_API_URL);
 
 // Create an Axios instance
 const api = axios.create({
