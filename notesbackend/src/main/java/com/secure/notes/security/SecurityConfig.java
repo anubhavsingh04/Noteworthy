@@ -62,6 +62,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
                 .requestMatchers("/api/csrf-token").permitAll()
                 .requestMatchers("/api/auth/public/**").permitAll()
+                .requestMatchers("/api/health-check", "/api/ping", "/api/csrf-token").permitAll()
                 .requestMatchers("/oauth2/**").permitAll()
                 .anyRequest().authenticated())
                         .oauth2Login(oauth2 -> {
@@ -73,9 +74,9 @@ public class SecurityConfig {
         http.csrf(csrf -> csrf
                 .csrfTokenRepository(CookieCsrfTokenRepository.withHttpOnlyFalse())
                 .ignoringRequestMatchers(
-                        "/api/auth/**",  // All auth endpoints
-                        "/api/notes/**",  // Your notes API
-                        "/api/**",        // Or all API endpoints if you prefer
+                        "/api/auth/**",
+                        "/api/notes/**",
+                        "/api/**",
                         "/oauth2/**"
                 ));
 
