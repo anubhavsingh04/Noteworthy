@@ -14,7 +14,7 @@ public class HealthController {
 
     @GetMapping("/api/health-check")
     public ResponseEntity<Map<String, Object>> healthCheck() {
-        log.info("Health check started /api/health-check");  // Use 'log' from @Slf4j
+        log.info("Health check started /api/health-check");
         Map<String, Object> response = new HashMap<>();
         response.put("status", "UP");
         response.put("timestamp", LocalDateTime.now().toString());
@@ -24,7 +24,7 @@ public class HealthController {
 
     @GetMapping("/api/ping")
     public ResponseEntity<String> ping() {
-        log.info("Health check started /api/ping");  // Use 'log' from @Slf4j
+        log.info("Health check started /api/ping");
         return ResponseEntity.ok("pong");
     }
 }
